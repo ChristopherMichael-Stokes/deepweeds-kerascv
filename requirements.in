@@ -1,4 +1,5 @@
 tensorflow
+types-tensorflow
 tensorflow-metal
 tensorflow_datasets
 pandas
