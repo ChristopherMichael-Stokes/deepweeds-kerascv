@@ -1,0 +1,12 @@
+tensorflow
+tensorflow-metal
+tensorflow_datasets
+pandas
+plotly
+keras-cv
+opencv-python
+pillow
+scipy
+scikit-learn
+jupyter
+gdown

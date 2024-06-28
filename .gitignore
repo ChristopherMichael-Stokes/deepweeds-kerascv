@@ -1,0 +1,25 @@
+# Outputs
+outputs/
+tf_logs/
+data/**/*
+!data/.gitkeep
+
+# Generated directories
+__pycache__/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Binaries
+*.pyc
+*.pyo
+*.o
+*.a
+*.so
+*.exe
+*.dll
+
+# Python env
+.venv/
+
+# mac
+.DS_Store

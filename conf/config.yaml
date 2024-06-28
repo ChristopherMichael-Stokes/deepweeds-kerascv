@@ -1,0 +1,29 @@
+print_summary: true
+
+data:
+  val_samples: 5000
+  dataset: mnist
+
+model:
+  seed: 42
+  n_classes: 10
+  hidden_layers:
+    - activation: relu
+      n_units: 300
+    - activation: relu
+      n_units: 300
+  output_activation: softmax
+
+train:
+  loss: sparse_categorical_crossentropy
+  optimizer: Adam 
+  optimizer_params: 
+    learning_rate: 1e-5
+    weight_decay: 5.0
+  metrics: [accuracy]
+  train_args:
+    batch_size: 512
+    epochs: 500 
+
+output:
+  logdir: tf_logs
