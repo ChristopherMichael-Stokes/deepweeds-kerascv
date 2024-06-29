@@ -2,6 +2,8 @@ tensorflow
 types-tensorflow
 tensorflow-metal
 tensorflow_datasets
+keras_tuner
+hydra-core
 pandas
 plotly
 keras-cv

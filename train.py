@@ -1,21 +1,21 @@
 import logging
+from functools import partial
 from pathlib import Path
 from time import strftime
-from typing import Any, Dict, List, Tuple, cast
+from typing import Any, Callable, Dict, List, Tuple, cast
 
 import hydra
 import keras
+import keras_cv
 import keras_tuner as kt
 import numpy as np
 import tensorflow as tf
 from omegaconf import DictConfig, ListConfig
 
+from dataset import get_train_val_dataloader
+
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
-
-
-def load_data(dataset: str) -> tf.data.Dataset:
-    return getattr(tf.keras.datasets, dataset).load_data()
 
 
 def get_run_logdir(root_logdir) -> Path:
@@ -26,60 +26,87 @@ def get_run_logdir(root_logdir) -> Path:
 
 def get_model(
     seed: int,
+    input_shape: Tuple[int],
     n_classes: int,
     hidden_layers: List[Dict],
     output_activation: str,
-    X_train: np.ndarray,
 ) -> keras.Model:
-    MODEL_NAME = "WideAndDeep"
+    MODEL_NAME = "MeNet"
 
     tf.random.set_seed(seed)
-    normalization_layer = tf.keras.layers.Normalization()
-    input_ = tf.keras.layers.Input(shape=X_train.shape[1:])
-    flatten = tf.keras.layers.Flatten()
 
-    hidden_list: List[keras.Layer] = []
-    for layer in hidden_layers:
-        hidden_list.append(tf.keras.layers.Dense(layer["n_units"], activation=layer["activation"]))
+    # TODO: implement reading layer setup from config
+    model = tf.keras.Sequential(
+        [
+            tf.keras.Input(shape=input_shape),
+            tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation="relu"),
+            tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
+            tf.keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+            tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dropout(0.5),
+            tf.keras.layers.Dense(n_classes, activation="softmax"),
+        ],
+        name=MODEL_NAME,
+    )
 
-    concat_layer = tf.keras.layers.Concatenate()
-    output_layer = tf.keras.layers.Dense(n_classes, activation=output_activation)
+    return model
 
-    normalized = normalization_layer(flatten(input_))
-    hidden = normalized
-    for layer in hidden_list:
-        hidden = layer(hidden)
-    concat = concat_layer([normalized, hidden])
-    output = output_layer(concat)
 
-    normalization_layer.adapt(X_train.reshape(X_train.shape[0], -1))
+def preprocess_data(images, labels, augment=False):
+    labels = tf.one_hot(labels, 10)
+    inputs = {"images": images, "labels": labels}
+    outputs = inputs
+    # TODO: add simple augmentations beyond scaling
+    # TODO: make another notebook visualising effect of some transforms
+    augmenter = keras_cv.layers.Augmenter(
+        [
+            keras_cv.layers.Rescaling(scale=1.0 / 255),
+        ]
+    )
+    if augment:
+        outputs = augmenter(outputs)
 
-    return tf.keras.Model(name=MODEL_NAME, inputs=[input_], outputs=[output])
+    return outputs["images"], outputs["labels"]
 
 
 def train(
-    model: keras.Model,
     loss: str,
     optimizer: str,
     optimizer_params: DictConfig,
     metrics: List[str],
+    batch_size: int,
     train_args: DictConfig,
     tensorboard_path: Path,
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_valid: np.ndarray,
-    y_valid: np.ndarray,
+    model_cfg: DictConfig,
+    f_get_model: Callable[Any, keras.Model],
+    f_get_dataloader: Callable[Any, tf.data.Dataset],
 ) -> Dict:
+
+    train_data, val_data = f_get_dataloader()
+    train_data = (
+        train_data.batch(batch_size)
+        .map(lambda x, y: preprocess_data(x, y, augment=True), num_parallel_calls=tf.data.AUTOTUNE)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+
+    val_data = (
+        val_data.batch(batch_size)
+        .map(preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
+        .prefetch(tf.data.AUTOTUNE)
+    )
+
+    model = f_get_model(**model_cfg)
     model.compile(
         loss=loss,
         optimizer=getattr(tf.keras.optimizers, optimizer)(**optimizer_params),
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
 
+    # TODO: add class weighting to the loss as there is heavy imbalance with the negative class
     history = model.fit(
-        X_train,
-        y_train,
-        validation_data=(X_valid, y_valid),
+        x=train_data,
+        validation_data=val_data,
         callbacks=[
             keras.callbacks.TensorBoard(log_dir=tensorboard_path),
             keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True),
@@ -92,27 +119,27 @@ def train(
 
 @hydra.main(config_path="conf", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig):
-    dataset = cfg.data.dataset
+    seed = cfg.seed
     logdir = cfg.output.logdir
     model_cfg = cfg.model
+    train_path = Path(cfg.data.dataset)
 
-    (X_train_full, y_train_full), (X_test, y_test) = load_data(dataset)
-    X_train, y_train = X_train_full[: -cfg.data.val_samples], y_train_full[: -cfg.data.val_samples]
-    X_valid, y_valid = X_train_full[-cfg.data.val_samples :], y_train_full[-cfg.data.val_samples :]
+    get_dataloader = partial(
+        get_train_val_dataloader, train_path=train_path, seed=seed, val_split=cfg.data.val_split
+    )
 
     run_logdir = get_run_logdir(logdir)
-    model = get_model(**model_cfg, X_train=X_train)
 
     if cfg.print_summary:
+        model = get_model(**model_cfg)
         print(model.summary())
+        del model
 
     train(
-        model=model,
         tensorboard_path=run_logdir,
-        X_train=X_train,
-        y_train=y_train,
-        X_valid=X_valid,
-        y_valid=y_valid,
+        model_cfg=model_cfg,
+        f_get_model=get_model,
+        f_get_dataloader=get_dataloader,
         **cfg.train,
     )
 
