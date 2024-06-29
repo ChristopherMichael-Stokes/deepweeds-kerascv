@@ -53,17 +53,27 @@ def get_model(
     return model
 
 
+preprocessor = keras_cv.layers.Augmenter(
+    [
+        keras_cv.layers.Rescaling(scale=1.0 / 255),
+    ]
+)
+
+augmenter = keras_cv.layers.Augmenter(
+    [
+        # keras_cv.layers.Rescaling(scale=1.0 / 255),
+    ]
+)
+
+
 def preprocess_data(images, labels, augment=False):
     labels = tf.one_hot(labels, 10)
     inputs = {"images": images, "labels": labels}
     outputs = inputs
     # TODO: add simple augmentations beyond scaling
     # TODO: make another notebook visualising effect of some transforms
-    augmenter = keras_cv.layers.Augmenter(
-        [
-            keras_cv.layers.Rescaling(scale=1.0 / 255),
-        ]
-    )
+    outputs = preprocessor(outputs)
+
     if augment:
         outputs = augmenter(outputs)
 
@@ -79,6 +89,7 @@ def train(
     train_args: DictConfig,
     tensorboard_path: Path,
     model_cfg: DictConfig,
+    class_weight: DictConfig,
     f_get_model: Callable[Any, keras.Model],
     f_get_dataloader: Callable[Any, tf.data.Dataset],
 ) -> Dict:
@@ -103,7 +114,6 @@ def train(
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
 
-    # TODO: add class weighting to the loss as there is heavy imbalance with the negative class
     history = model.fit(
         x=train_data,
         validation_data=val_data,
@@ -111,6 +121,7 @@ def train(
             keras.callbacks.TensorBoard(log_dir=tensorboard_path),
             keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True),
         ],
+        class_weight={k: v / class_weight.weight_divisor for (k, v) in class_weight.weight_map.items()},
         **train_args,
     )
 
