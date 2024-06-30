@@ -1,0 +1,16 @@
+tensorflow[and-cuda]~=2.16
+tensorrt
+types-tensorflow
+tensorflow_datasets
+keras_tuner
+hydra-core
+pandas
+plotly
+keras-cv
+opencv-python
+pillow
+scipy
+scikit-learn
+jupyter
+gdown
+build
