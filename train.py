@@ -18,12 +18,6 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
-def get_run_logdir(root_logdir) -> Path:
-    root_logir_path = Path(root_logdir)
-    root_logir_path.mkdir(parents=True, exist_ok=True)
-    return root_logir_path / strftime("run_%Y_%m_%d_%H_%M_%S")
-
-
 def get_model(
     seed: int,
     input_shape: Tuple[int],
@@ -131,7 +125,8 @@ def train(
 @hydra.main(config_path="conf", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig):
     seed = cfg.seed
-    logdir = cfg.output.logdir
+    run_logdir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
+    # logdir = cfg.output.logdir
     model_cfg = cfg.model
     train_path = Path(cfg.data.dataset)
 
@@ -139,7 +134,7 @@ def main(cfg: DictConfig):
         get_train_val_dataloader, train_path=train_path, seed=seed, val_split=cfg.data.val_split
     )
 
-    run_logdir = get_run_logdir(logdir)
+    # run_logdir = get_run_logdir(logdir)
 
     if cfg.print_summary:
         model = get_model(**model_cfg)
