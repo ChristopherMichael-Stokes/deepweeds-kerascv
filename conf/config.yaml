@@ -13,16 +13,22 @@ model:
     - filters: 64
     - filters: 64
     - filters: 64
+    - filters: 128 
+    - filters: 128 
+    - filters: 128 
+    - filters: 256 
+    - filters: 256 
+    - filters: 256 
   output_activation: softmax
 
 train:
   loss: categorical_crossentropy
   optimizer: Adam 
   optimizer_params: 
-    learning_rate: 1e-5
-    weight_decay: 1e-5 
+    learning_rate: 1e-3
+    weight_decay: 5e-4 
   metrics: [accuracy, precision, recall, auc]
-  batch_size: 32 
+  batch_size: 256 
   class_weight:
     weight_divisor:
       18.0
