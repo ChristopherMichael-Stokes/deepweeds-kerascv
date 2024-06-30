@@ -12,7 +12,7 @@ import numpy as np
 import tensorflow as tf
 from omegaconf import DictConfig, ListConfig
 
-from dataset import get_train_val_dataloader
+from datasets.deep_weeds import get_train_val_dataloader
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -84,11 +84,13 @@ def train(
     tensorboard_path: Path,
     model_cfg: DictConfig,
     class_weight: DictConfig,
-    f_get_model: Callable[Any, keras.Model],
-    f_get_dataloader: Callable[Any, tf.data.Dataset],
+    f_get_model: Callable[[], keras.Model],
+    f_get_dataloader: Callable[[], tf.data.Dataset],
 ) -> Dict:
 
     train_data, val_data = f_get_dataloader()
+    assert isinstance(train_data, tf.data.Dataset)
+    assert isinstance(val_data, tf.data.Dataset)
     train_data = (
         train_data.batch(batch_size)
         .map(lambda x, y: preprocess_data(x, y, augment=True), num_parallel_calls=tf.data.AUTOTUNE)
@@ -102,11 +104,13 @@ def train(
     )
 
     model = f_get_model(**model_cfg)
+    assert isinstance(model, keras.Model)
     model.compile(
         loss=loss,
         optimizer=getattr(tf.keras.optimizers, optimizer)(**optimizer_params),
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
+    log.info(model.summary())
 
     history = model.fit(
         x=train_data,
@@ -122,7 +126,7 @@ def train(
     return history
 
 
-@hydra.main(config_path="conf", config_name="config.yaml", version_base="1.3")
+@hydra.main(config_path="../conf", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig):
     seed = cfg.seed
     run_logdir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
