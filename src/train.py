@@ -144,9 +144,10 @@ def train(
         validation_data=val_data,
         callbacks=[
             keras.callbacks.TensorBoard(log_dir=tensorboard_path),
-            keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True),
+            keras.callbacks.EarlyStopping(monitor="loss", patience=10, restore_best_weights=True),
         ],
         class_weight={k: v / class_weight.weight_divisor for (k, v) in class_weight.weight_map.items()},
+        verbose=2,
         **train_args,
     )
 
