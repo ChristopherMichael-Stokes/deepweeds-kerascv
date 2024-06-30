@@ -28,7 +28,10 @@ def get_model(
 
     tf.random.set_seed(seed)
 
-    def conv_skip_block(x, filters: int, kernel_shape=(3, 3), stride=(1, 1), padding="same"):
+    def conv_skip_block(
+        x: tf.Tensor, filters: int, kernel_shape=(3, 3), stride=(1, 1), padding="same"
+    ) -> tf.Tensor:
+        """Implements a residual block basically the same as resnet - https://arxiv.org/pdf/1512.03385"""
         skip = x
         x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
         x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
@@ -36,7 +39,6 @@ def get_model(
         x = keras.layers.BatchNormalization()(x)
         return x
 
-    # input_shape = (256,256,3)
     input_ = tf.keras.Input(shape=input_shape)
     input_layer = tf.keras.layers.Conv2D(64, (7, 7), (2, 2), padding="same")
     pool_layer = keras.layers.MaxPool2D(pool_size=(2, 2))
@@ -65,6 +67,9 @@ def get_preprocessors():
         ]
     )
 
+    # TODO: add simple augmentations + visualise outputs in a notebook,
+    # One hunch is that a saturation augment would help as there seems to be
+    # a lot of variation between image samples or image locations
     augmenter = keras_cv.layers.Augmenter(
         [
             # keras_cv.layers.Rescaling(scale=1.0 / 255),
@@ -83,8 +88,6 @@ def preprocess_data(
     labels = tf.one_hot(labels, 10)
     inputs = {"images": images, "labels": labels}
     outputs = inputs
-    # TODO: add simple augmentations beyond scaling
-    # TODO: make another notebook visualising effect of some transforms
     outputs = preprocessor(outputs)
 
     if augmenter:
