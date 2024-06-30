@@ -15,36 +15,47 @@ from omegaconf import DictConfig, ListConfig
 from datasets.deep_weeds import get_train_val_dataloader
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
 
 def get_model(
     seed: int,
     input_shape: Tuple[int],
     n_classes: int,
-    hidden_layers: List[Dict],
+    blocks: List[Dict],
     output_activation: str,
 ) -> keras.Model:
     MODEL_NAME = "MeNet"
 
     tf.random.set_seed(seed)
 
-    # TODO: implement reading layer setup from config
-    model = tf.keras.Sequential(
-        [
-            tf.keras.Input(shape=input_shape),
-            tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation="relu"),
-            tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
-            tf.keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
-            tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
-            tf.keras.layers.Flatten(),
-            tf.keras.layers.Dropout(0.5),
-            tf.keras.layers.Dense(n_classes, activation="softmax"),
-        ],
-        name=MODEL_NAME,
-    )
+    def conv_skip_block(x, filters: int, kernel_shape=(3, 3), stride=(1, 1), padding="same"):
+        skip = x
+        x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
+        x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
+        x = tf.keras.layers.Concatenate()([x, skip])
+        x = keras.layers.BatchNormalization()(x)
+        return x
 
-    return model
+    # input_shape = (256,256,3)
+    input_ = tf.keras.Input(shape=input_shape)
+    input_layer = tf.keras.layers.Conv2D(64, (7, 7), (2, 2), padding="same")
+    pool_layer = keras.layers.MaxPool2D(pool_size=(2, 2))
+    global_avg_pool = tf.keras.layers.GlobalAveragePooling2D()
+    output_layer = tf.keras.layers.Dense(n_classes, activation="softmax")
+
+    # Input conv + pool
+    x = input_layer(input_)
+    x = pool_layer(x)
+
+    # Residual blocks
+    for block in blocks:
+        x = conv_skip_block(x, **block)
+
+    # Output pool + fully connected
+    x = global_avg_pool(x)
+    output = output_layer(x)
+
+    return tf.keras.Model(name=MODEL_NAME, inputs=[input_], outputs=[output])
 
 
 preprocessor = keras_cv.layers.Augmenter(
@@ -84,9 +95,9 @@ def train(
     tensorboard_path: Path,
     model_cfg: DictConfig,
     class_weight: DictConfig,
-    f_get_model: Callable[[], keras.Model],
-    f_get_dataloader: Callable[[], tf.data.Dataset],
-) -> Dict:
+    f_get_model: Callable[..., keras.Model],
+    f_get_dataloader: Callable[..., tf.data.Dataset],
+) -> Tuple[keras.Model, Dict]:
 
     train_data, val_data = f_get_dataloader()
     assert isinstance(train_data, tf.data.Dataset)
@@ -103,34 +114,32 @@ def train(
         .prefetch(tf.data.AUTOTUNE)
     )
 
-    model = f_get_model(**model_cfg)
+    model = f_get_model(**model_cfg)  # type: ignore
     assert isinstance(model, keras.Model)
     model.compile(
         loss=loss,
         optimizer=getattr(tf.keras.optimizers, optimizer)(**optimizer_params),
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
-    log.info(model.summary())
 
     history = model.fit(
         x=train_data,
         validation_data=val_data,
         callbacks=[
             keras.callbacks.TensorBoard(log_dir=tensorboard_path),
-            keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True),
+            keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True),
         ],
         class_weight={k: v / class_weight.weight_divisor for (k, v) in class_weight.weight_map.items()},
         **train_args,
     )
 
-    return history
+    return model, history
 
 
 @hydra.main(config_path="../conf", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig):
     seed = cfg.seed
     run_logdir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
-    # logdir = cfg.output.logdir
     model_cfg = cfg.model
     train_path = Path(cfg.data.dataset)
 
@@ -138,20 +147,20 @@ def main(cfg: DictConfig):
         get_train_val_dataloader, train_path=train_path, seed=seed, val_split=cfg.data.val_split
     )
 
-    # run_logdir = get_run_logdir(logdir)
-
     if cfg.print_summary:
         model = get_model(**model_cfg)
-        print(model.summary())
+        model.summary(print_fn=log.info)
         del model
 
-    train(
+    model, history = train(
         tensorboard_path=run_logdir,
         model_cfg=model_cfg,
         f_get_model=get_model,
         f_get_dataloader=get_dataloader,
         **cfg.train,
     )
+
+    # TODO: add final validation plots here
 
 
 if __name__ == "__main__":
