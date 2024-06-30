@@ -36,7 +36,8 @@ def get_model(
         x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
         x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
         x = tf.keras.layers.Concatenate()([x, skip])
-        x = keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
         return x
 
     input_ = tf.keras.Input(shape=input_shape)
