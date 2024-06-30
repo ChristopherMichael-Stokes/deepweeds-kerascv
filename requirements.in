@@ -1,4 +1,4 @@
-tensorflow
+tensorflow~=2.16
 types-tensorflow
 tensorflow-metal
 tensorflow_datasets
@@ -13,3 +13,4 @@ scipy
 scikit-learn
 jupyter
 gdown
+build

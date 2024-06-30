@@ -3,11 +3,14 @@ outputs/
 tf_logs/
 data/**/*
 !data/.gitkeep
+dist/
+build/
 
 # Generated directories
 __pycache__/
 .mypy_cache/
 .ipynb_checkpoints/
+*.egg-info/
 
 # Binaries
 *.pyc

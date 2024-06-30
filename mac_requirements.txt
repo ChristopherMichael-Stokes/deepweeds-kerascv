@@ -44,6 +44,8 @@ beautifulsoup4==4.12.3
     #   nbconvert
 bleach==6.1.0
     # via nbconvert
+build==1.2.1
+    # via -r requirements.in
 certifi==2024.6.2
     # via
     #   httpcore
@@ -290,6 +292,7 @@ overrides==7.7.0
     # via jupyter-server
 packaging==24.1
     # via
+    #   build
     #   hydra-core
     #   ipykernel
     #   jupyter-server
@@ -354,6 +357,8 @@ pygments==2.18.0
     #   nbconvert
     #   qtconsole
     #   rich
+pyproject-hooks==1.1.0
+    # via build
 pysocks==1.7.1
     # via requests
 python-dateutil==2.9.0.post0
