@@ -41,7 +41,7 @@ def get_model(
     input_layer = tf.keras.layers.Conv2D(64, (7, 7), (2, 2), padding="same")
     pool_layer = keras.layers.MaxPool2D(pool_size=(2, 2))
     global_avg_pool = tf.keras.layers.GlobalAveragePooling2D()
-    output_layer = tf.keras.layers.Dense(n_classes, activation="softmax")
+    output_layer = tf.keras.layers.Dense(n_classes, activation=output_activation)
 
     # Input conv + pool
     x = input_layer(input_)
@@ -58,20 +58,28 @@ def get_model(
     return tf.keras.Model(name=MODEL_NAME, inputs=[input_], outputs=[output])
 
 
-preprocessor = keras_cv.layers.Augmenter(
-    [
-        keras_cv.layers.Rescaling(scale=1.0 / 255),
-    ]
-)
+def get_preprocessors():
+    preprocessor = keras_cv.layers.Augmenter(
+        [
+            keras_cv.layers.Rescaling(scale=1.0 / 255),
+        ]
+    )
 
-augmenter = keras_cv.layers.Augmenter(
-    [
-        # keras_cv.layers.Rescaling(scale=1.0 / 255),
-    ]
-)
+    augmenter = keras_cv.layers.Augmenter(
+        [
+            # keras_cv.layers.Rescaling(scale=1.0 / 255),
+        ]
+    )
+
+    return preprocessor, augmenter
 
 
-def preprocess_data(images, labels, augment=False):
+def preprocess_data(
+    images,
+    labels,
+    preprocessor: keras_cv.layers.Augmenter,
+    augmenter: keras_cv.layers.Augmenter | None = None,
+):
     labels = tf.one_hot(labels, 10)
     inputs = {"images": images, "labels": labels}
     outputs = inputs
@@ -79,7 +87,7 @@ def preprocess_data(images, labels, augment=False):
     # TODO: make another notebook visualising effect of some transforms
     outputs = preprocessor(outputs)
 
-    if augment:
+    if augmenter:
         outputs = augmenter(outputs)
 
     return outputs["images"], outputs["labels"]
@@ -102,15 +110,20 @@ def train(
     train_data, val_data = f_get_dataloader()
     assert isinstance(train_data, tf.data.Dataset)
     assert isinstance(val_data, tf.data.Dataset)
+
+    preprocessor, augmenter = get_preprocessors()
     train_data = (
         train_data.batch(batch_size)
-        .map(lambda x, y: preprocess_data(x, y, augment=True), num_parallel_calls=tf.data.AUTOTUNE)
+        .map(
+            lambda x, y: preprocess_data(x, y, preprocessor, augmenter),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
         .prefetch(tf.data.AUTOTUNE)
     )
 
     val_data = (
         val_data.batch(batch_size)
-        .map(preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
+        .map(lambda x, y: preprocess_data(x, y, preprocessor), num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
 
