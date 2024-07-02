@@ -13,112 +13,17 @@ import tensorflow as tf
 from omegaconf import DictConfig, ListConfig
 
 from datasets.deep_weeds import get_train_val_dataloader
+from models import not_resnet
+from processing import PreProcessor
 
 log = logging.getLogger(__name__)
-
-
-def get_model(
-    input_shape: Tuple[int],
-    n_classes: int,
-    blocks: List[Dict],
-    output_activation: str,
-    seed: int,
-    block_dropout: float | None = None,
-    scale_inputs: bool | None = None,
-) -> keras.Model:
-    MODEL_NAME = "MeNet"
-
-    tf.random.set_seed(seed)
-
-    def conv_skip_block(
-        x: tf.Tensor, filters: int, kernel_shape=(3, 3), padding="same", drop_rate=None
-    ) -> tf.Tensor:
-        """Implements a residual block basically the same as resnet - https://arxiv.org/pdf/1512.03385,
-        however with spatial dropout for improved training stability."""
-        skip = x
-        x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.ReLU()(x)
-        if drop_rate:
-            x = keras.layers.SpatialDropout2D(drop_rate)(x)
-        x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Concatenate()([x, skip])
-        x = tf.keras.layers.ReLU()(x)
-        return x
-
-    input_ = tf.keras.Input(shape=input_shape)
-    scaling = keras_cv.layers.Rescaling(scale=1.0 / 255)
-    input_layer = tf.keras.layers.Conv2D(64, (7, 7), (2, 2), padding="same")
-    pool_layer = tf.keras.layers.MaxPool2D(pool_size=(2, 2))
-    global_avg_pool = tf.keras.layers.GlobalAveragePooling2D()
-    output_layer = tf.keras.layers.Dense(n_classes, activation=output_activation)
-
-    # Input conv + pool
-    x = input_layer(input_)
-    if scale_inputs:
-        x = scaling(x)
-    x = pool_layer(x)
-
-    # Residual blocks
-    for block in blocks:
-        x = conv_skip_block(x, drop_rate=block_dropout, **block)
-
-    # Output pool + fully connected
-    x = global_avg_pool(x)
-    x = tf.keras.layers.BatchNormalization()(x)
-    output = output_layer(x)
-
-    return tf.keras.Model(name=MODEL_NAME, inputs=[input_], outputs=[output])
-
-
-def get_preprocessors():
-    # TODO: add simple augmentations + visualise outputs in a notebook,
-    # One hunch is that a saturation augment would help as there seems to be
-    # a lot of variation between image samples or image locations
-
-    jitter = keras_cv.layers.RandomColorJitter(
-        value_range=(0, 255),
-        brightness_factor=(-0.2, 0.2),
-        contrast_factor=(0.5, 0.7),
-        saturation_factor=(0.4, 0.6),
-        hue_factor=(0.0, 0.3),
-    )
-    cut_mix = keras_cv.layers.Augmenter(
-        [
-            keras_cv.layers.CutMix(),
-            keras_cv.layers.MixUp(),
-        ]
-    )
-    return keras_cv.layers.RandomAugmentationPipeline(
-        [
-            jitter,
-            # cut_mix,
-        ],
-        augmentations_per_image=1,
-    )
-
-
-def preprocess_data(
-    images,
-    labels,
-    augmenter: keras_cv.layers.Augmenter | None = None,
-):
-    labels = tf.one_hot(labels, 10, dtype=tf.bfloat16)
-    inputs = {"images": images, "labels": labels}
-
-    outputs = inputs
-
-    if augmenter:
-        outputs = augmenter(outputs)
-
-    return outputs["images"], outputs["labels"]
 
 
 def train(
     loss: str,
     optimizer: str,
     optimizer_params: DictConfig,
+    num_classes: int,
     metrics: List[str],
     batch_size: int,
     train_args: DictConfig,
@@ -137,27 +42,27 @@ def train(
     assert isinstance(train_data, tf.data.Dataset)
     assert isinstance(val_data, tf.data.Dataset)
 
-    augmenter = get_preprocessors() if augment else None
-    log.info(f"Augmenter pipeline: {augmenter}")
+    train_processor = PreProcessor(num_classes=num_classes, do_augment=augment)
+    val_processor = PreProcessor(num_classes=num_classes, do_augment=False)
+    log.info(f"Train processing pipeline: {train_processor}")
+    log.info(f"Val processing pipeline: {val_processor}")
 
     train_data = (
-        train_data.batch(batch_size)
-        .map(
-            lambda x, y: preprocess_data(x, y, augmenter),
-            num_parallel_calls=tf.data.AUTOTUNE,
-        )
+        train_data.shuffle(buffer_size=batch_size * 4, seed=seed, reshuffle_each_iteration=True)
+        .batch(batch_size, drop_remainder=True)
+        .map(train_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
 
     val_data = (
         val_data.batch(batch_size)
-        .map(preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
+        .map(val_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
 
     f_loss = getattr(tf.keras.losses, loss)
     if loss_params:
-        f_loss = partial(f_loss, **loss_params)
+        f_loss = partial(f_loss, **loss_params)  # type: ignore
 
     model = f_get_model(**model_cfg)  # type: ignore
     assert isinstance(model, keras.Model)
@@ -198,7 +103,7 @@ def main(cfg: DictConfig):
     )
 
     if cfg.print_summary:
-        model = get_model(**model_cfg)
+        model = not_resnet(**model_cfg)
         model.summary(print_fn=log.info)
         del model
 
@@ -206,7 +111,7 @@ def main(cfg: DictConfig):
         tensorboard_path=run_logdir,
         model_cfg=model_cfg,
         seed=cfg.seed,
-        f_get_model=get_model,
+        f_get_model=not_resnet,
         f_get_dataloader=get_dataloader,
         **cfg.train,
     )
