@@ -72,6 +72,13 @@ def train(
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
 
+    lr_schedule = keras.callbacks.ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.5,
+        patience=5,
+    )
+
+    log.info(f"Learning rate schedule: {lr_schedule}")
     history = model.fit(
         x=train_data,
         validation_data=val_data,
@@ -79,6 +86,7 @@ def train(
             keras.callbacks.TensorBoard(log_dir=tensorboard_path),
             keras.callbacks.EarlyStopping(monitor="loss", patience=10, restore_best_weights=True),
             keras.callbacks.CSVLogger(filename=tensorboard_path / "train_log.csv"),
+            lr_schedule,
         ],
         class_weight={k: v / class_weight.weight_divisor for (k, v) in class_weight.weight_map.items()},
         verbose=2,
