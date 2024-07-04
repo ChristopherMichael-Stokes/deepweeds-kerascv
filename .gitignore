@@ -1,7 +1,8 @@
 # Outputs
 # outputs/ # We should now be tracking with git lfs
 outputs/**/plugins/
-tf_logs/
+outputs/**/*.keras
+outputs/**/*.h5
 data/**/*
 !data/.gitkeep
 dist/
