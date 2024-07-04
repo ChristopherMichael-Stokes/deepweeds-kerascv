@@ -1,5 +1,6 @@
 # Outputs
-outputs/
+# outputs/ # We should now be tracking with git lfs
+outputs/**/plugins/
 tf_logs/
 data/**/*
 !data/.gitkeep
