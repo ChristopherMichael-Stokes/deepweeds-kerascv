@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 
 def train(
-    loss: str,
+    focal_loss: bool,
     optimizer: str,
     optimizer_params: DictConfig,
     num_classes: int,
@@ -29,12 +29,14 @@ def train(
     train_args: DictConfig,
     tensorboard_path: Path,
     model_cfg: DictConfig,
-    class_weight: DictConfig,
     augment: bool,
     seed: int,
     f_get_model: Callable[..., keras.Model],
     f_get_dataloader: Callable[..., tf.data.Dataset],
+    dtype_policy: str | None = "float32",
     loss_params: DictConfig | None = None,
+    lr_schedule_params: DictConfig | None = None,
+    class_weight: DictConfig | None = None,
 ) -> Tuple[keras.Model, Dict]:
     tf.keras.utils.set_random_seed(seed)
 
@@ -42,6 +44,9 @@ def train(
     assert isinstance(train_data, tf.data.Dataset)
     assert isinstance(val_data, tf.data.Dataset)
 
+    keras.mixed_precision.set_dtype_policy(
+        "float32"
+    )  # A hack to fix the pre-processing pipeline which only works on float32 :(
     train_processor = PreProcessor(num_classes=num_classes, do_augment=augment)
     val_processor = PreProcessor(num_classes=num_classes, do_augment=False)
     log.info(f"Train processing pipeline: {train_processor}")
@@ -51,6 +56,7 @@ def train(
         train_data.shuffle(buffer_size=batch_size * 4, seed=seed, reshuffle_each_iteration=True)
         .batch(batch_size, drop_remainder=True)
         .map(train_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
+        # .map(train_processor.cut_mix_and_mix_up, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
 
@@ -59,36 +65,55 @@ def train(
         .map(val_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
+    keras.mixed_precision.set_dtype_policy(dtype_policy)
 
-    f_loss = getattr(tf.keras.losses, loss)
-    if loss_params:
-        f_loss = partial(f_loss, **loss_params)  # type: ignore
+    if not loss_params:
+        loss_params = {}
+
+    if focal_loss:
+        if loss_params and "alpha" in loss_params:
+            alpha = tf.convert_to_tensor(np.array(loss_params.alpha))
+            del loss_params.alpha
+            loss = keras.losses.CategoricalFocalCrossentropy(alpha=alpha, **loss_params)
+        else:
+            loss = keras.losses.CategoricalFocalCrossentropy(**loss_params)
+    else:
+        loss = keras.losses.CategoricalCrossentropy(**loss_params)
 
     model = f_get_model(**model_cfg)  # type: ignore
     assert isinstance(model, keras.Model)
     model.compile(
-        loss=f_loss,
+        loss=loss,
         optimizer=getattr(tf.keras.optimizers, optimizer)(**optimizer_params),
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
 
-    lr_schedule = keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss",
-        factor=0.5,
-        patience=5,
-    )
+    callbacks = [
+        keras.callbacks.TensorBoard(
+            log_dir=tensorboard_path,
+            histogram_freq=1,
+            write_steps_per_second=True,
+            # profile_batch="30,90",
+        ),
+        keras.callbacks.EarlyStopping(monitor="loss", patience=10, restore_best_weights=True),
+        keras.callbacks.CSVLogger(filename=tensorboard_path / "train_log.csv"),
+    ]
 
-    log.info(f"Learning rate schedule: {lr_schedule}")
+    if lr_schedule_params:
+        lr_schedule = keras.callbacks.ReduceLROnPlateau(**lr_schedule_params)
+        callbacks.append(lr_schedule)
+
+    if class_weight:
+        divisor = 1 if "weight_divisor" not in class_weight else class_weight.weight_divisor
+        class_weight_map = {k: v / divisor for (k, v) in class_weight.weight_map.items()}
+    else:
+        class_weight_map = None
+
     history = model.fit(
         x=train_data,
         validation_data=val_data,
-        callbacks=[
-            keras.callbacks.TensorBoard(log_dir=tensorboard_path),
-            keras.callbacks.EarlyStopping(monitor="loss", patience=10, restore_best_weights=True),
-            keras.callbacks.CSVLogger(filename=tensorboard_path / "train_log.csv"),
-            lr_schedule,
-        ],
-        class_weight={k: v / class_weight.weight_divisor for (k, v) in class_weight.weight_map.items()},
+        callbacks=callbacks,
+        class_weight=class_weight_map,
         verbose=2,
         **train_args,
     )
@@ -103,14 +128,15 @@ def main(cfg: DictConfig):
     model_cfg = cfg.model
     train_path = Path(cfg.data.dataset)
 
-    if "mixed_precision" in cfg:
-        tf.keras.mixed_precision.set_global_policy(cfg.mixed_precision)
+    dtype_policy = None if "mixed_precision" not in cfg else cfg.mixed_precision
 
     get_dataloader = partial(
         get_train_val_dataloader, train_path=train_path, seed=seed, val_split=cfg.data.val_split
     )
 
     if cfg.print_summary:
+        if dtype_policy:
+            tf.keras.mixed_precision.set_global_policy(cfg.mixed_precision)
         model = not_resnet(**model_cfg)
         model.summary(print_fn=log.info)
         del model
@@ -121,6 +147,7 @@ def main(cfg: DictConfig):
         seed=cfg.seed,
         f_get_model=not_resnet,
         f_get_dataloader=get_dataloader,
+        dtype_policy=dtype_policy,
         **cfg.train,
     )
 
