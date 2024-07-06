@@ -20,35 +20,36 @@ class PreProcessor:
             saturation_factor=(0.4, 0.6),
             hue_factor=(0.0, 0.3),
         )
-        cut_mix = keras_cv.layers.Augmenter(
-            [
-                keras_cv.layers.CutMix(),
-                keras_cv.layers.MixUp(),
-            ]
-        )
 
         self.num_classes = num_classes
         self.do_augment = do_augment
         self.augmentation_pipeline = keras_cv.layers.RandomAugmentationPipeline(
             [
                 jitter,
-                cut_mix,
             ],
             augmentations_per_image=augmentations_per_image,
         )
+        self.cut_mix = keras_cv.layers.CutMix()
+        self.mix_up = keras_cv.layers.MixUp()
+
+    def cut_mix_and_mix_up(self, samples):
+        samples = self.cut_mix(samples, training=True)
+        samples = self.mix_up(samples, training=True)
+        return samples
 
     def preprocess_data(
         self,
         images: tf.Tensor,
         labels: tf.Tensor,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
-        labels = tf.one_hot(labels, self.num_classes, dtype=tf.bfloat16)
+        labels = tf.one_hot(labels, self.num_classes)
         inputs = {"images": images, "labels": labels}
 
         outputs = inputs
 
         if self.do_augment:
             outputs = self.augmentation_pipeline(outputs)
+            outputs = self.cut_mix_and_mix_up(outputs)
 
         return outputs["images"], outputs["labels"]
 
