@@ -65,3 +65,9 @@ train:
 
 output:
   logdir: tf_logs
+
+hydra:
+  sweeper:
+    params:
+      train.lr_schedule_params.factor: 0.1,0.3,0.5,0.7,0.9
+      train.optimizer_params.learning_rate: 1e-4,5e-5
