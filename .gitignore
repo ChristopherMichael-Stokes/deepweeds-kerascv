@@ -3,6 +3,9 @@
 outputs/**/plugins/
 outputs/**/*.keras
 outputs/**/*.h5
+multirun/**/plugins/
+multirun/**/*.keras
+multirun/**/*.h5
 data/**/*
 !data/.gitkeep
 dist/
