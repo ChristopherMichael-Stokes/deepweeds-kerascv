@@ -13,19 +13,21 @@ class PreProcessor:
         # One hunch is that a saturation augment would help as there seems to be
         # a lot of variation between image samples or image locations
 
-        jitter = keras_cv.layers.RandomColorJitter(
-            value_range=(0, 255),
-            brightness_factor=(-0.2, 0.2),
-            contrast_factor=(0.5, 0.7),
-            saturation_factor=(0.4, 0.6),
-            hue_factor=(0.0, 0.3),
-        )
-
+        # jitter = keras_cv.layers.RandomColorJitter(
+        #     value_range=(0, 255),
+        #     brightness_factor=(-0.2, 0.2),
+        #     contrast_factor=(0.5, 0.7),
+        #     saturation_factor=(0.4, 0.6),
+        #     hue_factor=(0.0, 0.3),
+        # )
         self.num_classes = num_classes
         self.do_augment = do_augment
         self.augmentation_pipeline = keras_cv.layers.RandomAugmentationPipeline(
             [
-                jitter,
+                keras_cv.layers.RandomFlip(mode="horizontal"),
+                keras_cv.layers.RandomChannelShift(value_range=(0, 255), factor=0.4),
+                keras_cv.layers.RandomColorDegeneration(factor=0.9),
+                keras_cv.layers.RandomCutout(0.5, 0.5),
             ],
             augmentations_per_image=augmentations_per_image,
         )
@@ -49,7 +51,7 @@ class PreProcessor:
 
         if self.do_augment:
             outputs = self.augmentation_pipeline(outputs)
-            outputs = self.cut_mix_and_mix_up(outputs)
+            # outputs = self.cut_mix_and_mix_up(outputs)
 
         return outputs["images"], outputs["labels"]
 

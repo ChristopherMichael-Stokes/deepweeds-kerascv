@@ -35,6 +35,7 @@ def train(
     f_get_dataloader: Callable[..., tf.data.Dataset],
     dtype_policy: str | None = "float32",
     loss_params: DictConfig | None = None,
+    early_stopping_params: DictConfig | None = None,
     lr_schedule_params: DictConfig | None = None,
     class_weight: DictConfig | None = None,
 ) -> Tuple[keras.Model, Dict]:
@@ -95,9 +96,13 @@ def train(
             write_steps_per_second=True,
             # profile_batch="30,90",
         ),
-        keras.callbacks.EarlyStopping(monitor="loss", patience=10, restore_best_weights=True),
         keras.callbacks.CSVLogger(filename=tensorboard_path / "train_log.csv"),
     ]
+
+    if early_stopping_params:
+        early_stopping = keras.callbacks.EarlyStopping(**early_stopping_params)
+        # monitor="loss", patience=10, restore_best_weights=True),
+        callbacks.append(early_stopping)
 
     if lr_schedule_params:
         lr_schedule = keras.callbacks.ReduceLROnPlateau(**lr_schedule_params)
