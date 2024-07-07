@@ -92,16 +92,13 @@ def train(
     callbacks = [
         keras.callbacks.TensorBoard(
             log_dir=tensorboard_path,
-            histogram_freq=1,
             write_steps_per_second=True,
-            # profile_batch="30,90",
         ),
         keras.callbacks.CSVLogger(filename=tensorboard_path / "train_log.csv"),
     ]
 
     if early_stopping_params:
         early_stopping = keras.callbacks.EarlyStopping(**early_stopping_params)
-        # monitor="loss", patience=10, restore_best_weights=True),
         callbacks.append(early_stopping)
 
     if lr_schedule_params:
