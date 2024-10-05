@@ -6,7 +6,7 @@ authors = [
 ]
 description = "Python modules for object detection in keras. This is not intended for distribution."
 readme = "README.md"
-requires-python = "~=3.10"
+requires-python = "~=3.11"
 dependencies = [
     "build>=1.2.2",
     "gdown>=5.2.0",
