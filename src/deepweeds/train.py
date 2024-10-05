@@ -12,9 +12,9 @@ import numpy as np
 import tensorflow as tf
 from omegaconf import DictConfig, ListConfig
 
-from datasets.deep_weeds import get_train_val_dataloader
-from models import not_resnet
-from processing import PreProcessor
+from deepweeds.datasets.deep_weeds import get_train_val_dataloader
+from deepweeds.models import not_resnet
+from deepweeds.processing import PreProcessor
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def train(
     return model, history
 
 
-@hydra.main(config_path="../conf", config_name="config.yaml", version_base="1.3")
+@hydra.main(config_path="../../conf", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig):
     seed = cfg.seed
     run_logdir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
