@@ -12,7 +12,7 @@ model:
   input_shape: [256, 256, 3]
   output_activation: softmax
   block_dropout: 0.3
-  blocks:
+  blocks: 
     - filters: 16
     - filters: 16
     - filters: 16
@@ -30,7 +30,7 @@ train:
     # alpha: [[0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]]
     alpha: [[0.12705305, 0.01433119, 0.12518212, 0.1132095 , 0.12223666,
        0.13133574, 0.12484786, 0.11988596, 0.12191792]]
-  augment: True 
+  augment: False # Augments are broken on macos for some reason?
   optimizer: AdamW
   optimizer_params:
     learning_rate: 1e-4

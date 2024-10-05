@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict, List, Tuple, cast
+from typing import Dict, List, Tuple
 
 import keras
 import keras_cv
@@ -11,13 +11,12 @@ log = logging.getLogger(__name__)
 def not_resnet(
     input_shape: Tuple[int],
     n_classes: int,
-    blocks: List[Dict],
+    blocks: List[Dict] | None,
     output_activation: str,
     seed: int,
     block_dropout: float | None = None,
     scale_inputs: bool | None = None,
 ) -> keras.Model:
-
     MODEL_NAME = "MeNet"
     keras.utils.set_random_seed(seed)
 
@@ -28,24 +27,24 @@ def not_resnet(
         """Implements a residual block basically the same as resnet - https://arxiv.org/pdf/1512.03385,
         however with spatial dropout for improved training stability."""
         skip = x
-        x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.ReLU()(x)
+        x = keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.ReLU()(x)
         if drop_rate:
             x = keras.layers.SpatialDropout2D(drop_rate)(x)
-        x = tf.keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.Concatenate()([x, skip])
-        x = tf.keras.layers.ReLU()(x)
+        x = keras.layers.Conv2D(filters, kernel_shape, padding=padding)(x)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Concatenate()([x, skip])
+        x = keras.layers.ReLU()(x)
         return x
 
-    input_ = tf.keras.Input(shape=input_shape)
+    input_ = keras.Input(shape=input_shape)
     scaling = keras_cv.layers.Rescaling(scale=1.0 / 255)
-    input_layer = tf.keras.layers.Conv2D(64, (7, 7), (2, 2), padding="same")
-    pool_layer = tf.keras.layers.MaxPool2D(pool_size=(2, 2))
-    global_avg_pool = tf.keras.layers.GlobalAveragePooling2D()
-    output_bn = tf.keras.layers.BatchNormalization()
-    output_layer = tf.keras.layers.Dense(n_classes, activation=output_activation)
+    input_layer = keras.layers.Conv2D(64, (7, 7), (2, 2), padding="same")
+    pool_layer = keras.layers.MaxPool2D(pool_size=(2, 2))
+    global_avg_pool = keras.layers.GlobalAveragePooling2D()
+    output_bn = keras.layers.BatchNormalization()
+    output_layer = keras.layers.Dense(n_classes, activation=output_activation)
 
     # Model data flow construction
     # Input conv + pool
@@ -55,7 +54,7 @@ def not_resnet(
     x = pool_layer(x)
 
     # Residual blocks
-    for block in blocks:
+    for block in blocks or []:
         x = conv_skip_block(x, drop_rate=block_dropout, **block)
 
     # Output pool + fully connected
@@ -63,4 +62,4 @@ def not_resnet(
     x = output_bn(x)
     output = output_layer(x)
 
-    return tf.keras.Model(name=MODEL_NAME, inputs=[input_], outputs=[output])
+    return keras.Model(name=MODEL_NAME, inputs=[input_], outputs=[output])

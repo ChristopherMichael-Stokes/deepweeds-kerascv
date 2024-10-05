@@ -1,20 +1,17 @@
 import logging
 from functools import partial
 from pathlib import Path
-from time import strftime
-from typing import Any, Callable, Dict, List, Tuple, cast
+from typing import Callable, Dict, List, Tuple
 
 import hydra
 import keras
-import keras_cv
-import keras_tuner as kt
 import numpy as np
 import tensorflow as tf
 from omegaconf import DictConfig, ListConfig
 
-from datasets.deep_weeds import get_train_val_dataloader
-from models import not_resnet
-from processing import PreProcessor
+from deepweeds.datasets.deep_weeds import get_train_val_dataloader
+from deepweeds.models import not_resnet
+from deepweeds.processing import PreProcessor
 
 log = logging.getLogger(__name__)
 
@@ -32,14 +29,14 @@ def train(
     augment: bool,
     seed: int,
     f_get_model: Callable[..., keras.Model],
-    f_get_dataloader: Callable[..., tf.data.Dataset],
+    f_get_dataloader: Callable[[], tf.data.Dataset],
     dtype_policy: str | None = "float32",
     loss_params: DictConfig | None = None,
     early_stopping_params: DictConfig | None = None,
     lr_schedule_params: DictConfig | None = None,
     class_weight: DictConfig | None = None,
 ) -> Tuple[keras.Model, Dict]:
-    tf.keras.utils.set_random_seed(seed)
+    keras.utils.set_random_seed(seed)
 
     train_data, val_data = f_get_dataloader()
     assert isinstance(train_data, tf.data.Dataset)
@@ -57,7 +54,6 @@ def train(
         train_data.shuffle(buffer_size=batch_size * 4, seed=seed, reshuffle_each_iteration=True)
         .batch(batch_size, drop_remainder=True)
         .map(train_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
-        # .map(train_processor.cut_mix_and_mix_up, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
 
@@ -73,8 +69,8 @@ def train(
 
     if focal_loss:
         if loss_params and "alpha" in loss_params:
-            alpha = tf.convert_to_tensor(np.array(loss_params.alpha))
-            del loss_params.alpha
+            alpha = tf.convert_to_tensor(np.array(loss_params.alpha))  # type: ignore
+            del loss_params.alpha  # type: ignore
             loss = keras.losses.CategoricalFocalCrossentropy(alpha=alpha, **loss_params)
         else:
             loss = keras.losses.CategoricalFocalCrossentropy(**loss_params)
@@ -85,7 +81,7 @@ def train(
     assert isinstance(model, keras.Model)
     model.compile(
         loss=loss,
-        optimizer=getattr(tf.keras.optimizers, optimizer)(**optimizer_params),
+        optimizer=getattr(keras.optimizers, optimizer)(**optimizer_params),
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
 
@@ -123,7 +119,7 @@ def train(
     return model, history
 
 
-@hydra.main(config_path="../conf", config_name="config.yaml", version_base="1.3")
+@hydra.main(config_path="../../conf", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig):
     seed = cfg.seed
     run_logdir = Path(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
@@ -133,12 +129,15 @@ def main(cfg: DictConfig):
     dtype_policy = None if "mixed_precision" not in cfg else cfg.mixed_precision
 
     get_dataloader = partial(
-        get_train_val_dataloader, train_path=train_path, seed=seed, val_split=cfg.data.val_split
+        get_train_val_dataloader,
+        train_path=train_path,
+        seed=seed,
+        val_split=cfg.data.val_split,
     )
 
     if cfg.print_summary:
         if dtype_policy:
-            tf.keras.mixed_precision.set_global_policy(cfg.mixed_precision)
+            keras.mixed_precision.set_global_policy(cfg.mixed_precision)
         model = not_resnet(**model_cfg)
         model.summary(print_fn=log.info)
         del model
