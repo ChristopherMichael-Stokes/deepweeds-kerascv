@@ -1,13 +1,10 @@
 import logging
 from functools import partial
 from pathlib import Path
-from time import strftime
-from typing import Any, Callable, Dict, List, Tuple, cast
+from typing import Callable, Dict, List, Tuple
 
 import hydra
 import keras
-import keras_cv
-import keras_tuner as kt
 import numpy as np
 import tensorflow as tf
 from omegaconf import DictConfig, ListConfig
@@ -32,7 +29,7 @@ def train(
     augment: bool,
     seed: int,
     f_get_model: Callable[..., keras.Model],
-    f_get_dataloader: Callable[..., tf.data.Dataset],
+    f_get_dataloader: Callable[[], tf.data.Dataset],
     dtype_policy: str | None = "float32",
     loss_params: DictConfig | None = None,
     early_stopping_params: DictConfig | None = None,
@@ -57,7 +54,6 @@ def train(
         train_data.shuffle(buffer_size=batch_size * 4, seed=seed, reshuffle_each_iteration=True)
         .batch(batch_size, drop_remainder=True)
         .map(train_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
-        # .map(train_processor.cut_mix_and_mix_up, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
     )
 
@@ -73,8 +69,8 @@ def train(
 
     if focal_loss:
         if loss_params and "alpha" in loss_params:
-            alpha = tf.convert_to_tensor(np.array(loss_params.alpha))
-            del loss_params.alpha
+            alpha = tf.convert_to_tensor(np.array(loss_params.alpha))  # type: ignore
+            del loss_params.alpha  # type: ignore
             loss = keras.losses.CategoricalFocalCrossentropy(alpha=alpha, **loss_params)
         else:
             loss = keras.losses.CategoricalFocalCrossentropy(**loss_params)
@@ -133,7 +129,10 @@ def main(cfg: DictConfig):
     dtype_policy = None if "mixed_precision" not in cfg else cfg.mixed_precision
 
     get_dataloader = partial(
-        get_train_val_dataloader, train_path=train_path, seed=seed, val_split=cfg.data.val_split
+        get_train_val_dataloader,
+        train_path=train_path,
+        seed=seed,
+        val_split=cfg.data.val_split,
     )
 
     if cfg.print_summary:

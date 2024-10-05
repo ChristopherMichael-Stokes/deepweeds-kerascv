@@ -43,3 +43,10 @@ build-backend = "hatchling.build"
 [project.urls]
 Homepage = "https://github.com/ChristopherMichael-Stokes/deepweeds-kerascv"
 Issues = "https://github.com/ChristopherMichael-Stokes/deepweeds-kerascv/issues"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+
+ignore_missing_imports = true

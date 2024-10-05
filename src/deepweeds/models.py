@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict, List, Tuple, cast
+from typing import Dict, List, Tuple
 
 import keras
 import keras_cv
@@ -17,7 +17,6 @@ def not_resnet(
     block_dropout: float | None = None,
     scale_inputs: bool | None = None,
 ) -> keras.Model:
-
     MODEL_NAME = "MeNet"
     keras.utils.set_random_seed(seed)
 
