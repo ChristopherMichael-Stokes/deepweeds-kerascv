@@ -39,7 +39,7 @@ def train(
     lr_schedule_params: DictConfig | None = None,
     class_weight: DictConfig | None = None,
 ) -> Tuple[keras.Model, Dict]:
-    tf.keras.utils.set_random_seed(seed)
+    keras.utils.set_random_seed(seed)
 
     train_data, val_data = f_get_dataloader()
     assert isinstance(train_data, tf.data.Dataset)
@@ -85,7 +85,7 @@ def train(
     assert isinstance(model, keras.Model)
     model.compile(
         loss=loss,
-        optimizer=getattr(tf.keras.optimizers, optimizer)(**optimizer_params),
+        optimizer=getattr(keras.optimizers, optimizer)(**optimizer_params),
         metrics=list(metrics) if isinstance(metrics, ListConfig) else metrics,
     )
 
@@ -138,7 +138,7 @@ def main(cfg: DictConfig):
 
     if cfg.print_summary:
         if dtype_policy:
-            tf.keras.mixed_precision.set_global_policy(cfg.mixed_precision)
+            keras.mixed_precision.set_global_policy(cfg.mixed_precision)
         model = not_resnet(**model_cfg)
         model.summary(print_fn=log.info)
         del model
