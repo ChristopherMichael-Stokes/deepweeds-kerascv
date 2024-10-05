@@ -32,7 +32,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 2. Create a local environment
 
 ```sh
-uv sync
+uv sync --frozen --compile-bytecode
 ```
 
 3. Manually run `notebooks/01_data_exploration.ipynb` to generate our local dataset
