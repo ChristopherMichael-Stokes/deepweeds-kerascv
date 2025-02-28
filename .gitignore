@@ -25,9 +25,16 @@ __pycache__/
 *.so
 *.exe
 *.dll
+*.onnx
 
 # Python env
 .venv/
 
 # mac
 .DS_Store
+
+# Exploration
+uncommitted/**/*
+!uncommitted/.gitkeep
+models/**/*
+!models/.gitkeep
