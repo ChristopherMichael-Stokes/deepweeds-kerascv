@@ -62,3 +62,26 @@ uv run tensorboard --logdir=multirun
 The code is not guaranteed in any way to run as intended under this configuration due to various issues like MacOS 13 not supporting a few required tensor ops on the metal gpu, tensorflow not having a cuda enabled distribution for windows etc.
 
 So try at your own risk...
+
+## Serving inference
+
+This requires you have a docker installation with access to an nvidia runtime (lots of docs on how to set this up).
+Additionally you also need the weights of a model trained earlier (see previous section) to be converted to onnx format (you can use the `notebooks/05_inference.py` to do this), and saved to the file `models/MeNet.onnx` - the name here can be anything as long as it corresponds to the value set in `main.py::settings.MODEL_NAME`.
+
+To start the app:
+```sh
+docker compose up --build -d
+```
+
+To send a test input image:
+```sh
+curl -X POST "http://localhost:8000/predict" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@data/images/train/chinee_apple/20160928-140314-0.jpg"
+```
+
+To stop the app:
+```sh
+docker compose down
+```
