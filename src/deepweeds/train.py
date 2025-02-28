@@ -1,7 +1,6 @@
 import logging
-from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple, cast
 
 import hydra
 import keras
@@ -12,6 +11,7 @@ from omegaconf import DictConfig, ListConfig
 from deepweeds.datasets.deep_weeds import get_train_val_dataloader
 from deepweeds.models import not_resnet
 from deepweeds.processing import PreProcessor
+from deepweeds.utils import assert_type
 
 log = logging.getLogger(__name__)
 
@@ -29,29 +29,31 @@ def train(
     augment: bool,
     seed: int,
     f_get_model: Callable[..., keras.Model],
-    f_get_dataloader: Callable[[], tf.data.Dataset],
+    train_data: tf.data.Dataset,
+    val_data: tf.data.Dataset,
     dtype_policy: str | None = "float32",
-    loss_params: DictConfig | None = None,
+    loss_params: DictConfig | dict | None = None,
     early_stopping_params: DictConfig | None = None,
     lr_schedule_params: DictConfig | None = None,
     class_weight: DictConfig | None = None,
+    save_model: bool | None = None,
 ) -> Tuple[keras.Model, Dict]:
     keras.utils.set_random_seed(seed)
 
-    train_data, val_data = f_get_dataloader()
-    assert isinstance(train_data, tf.data.Dataset)
-    assert isinstance(val_data, tf.data.Dataset)
+    assert_type(train_data, tf.data.Dataset)
+    assert_type(val_data, tf.data.Dataset)
 
-    keras.mixed_precision.set_dtype_policy(
-        "float32"
-    )  # A hack to fix the pre-processing pipeline which only works on float32 :(
+    # A hack to fix the pre-processing pipeline which only works on float32 :(
+    keras.mixed_precision.set_dtype_policy("float32")
     train_processor = PreProcessor(num_classes=num_classes, do_augment=augment)
     val_processor = PreProcessor(num_classes=num_classes, do_augment=False)
     log.info(f"Train processing pipeline: {train_processor}")
     log.info(f"Val processing pipeline: {val_processor}")
 
     train_data = (
-        train_data.shuffle(buffer_size=batch_size * 4, seed=seed, reshuffle_each_iteration=True)
+        train_data.shuffle(
+            buffer_size=batch_size * 4, seed=seed, reshuffle_each_iteration=True
+        )
         .batch(batch_size, drop_remainder=True)
         .map(train_processor.preprocess_data, num_parallel_calls=tf.data.AUTOTUNE)
         .prefetch(tf.data.AUTOTUNE)
@@ -64,21 +66,21 @@ def train(
     )
     keras.mixed_precision.set_dtype_policy(dtype_policy)
 
-    if not loss_params:
-        loss_params = {}
+    loss_params = dict(loss_params) if loss_params else {}
 
     if focal_loss:
-        if loss_params and "alpha" in loss_params:
-            alpha = tf.convert_to_tensor(np.array(loss_params.alpha))  # type: ignore
-            del loss_params.alpha  # type: ignore
-            loss = keras.losses.CategoricalFocalCrossentropy(alpha=alpha, **loss_params)
-        else:
-            loss = keras.losses.CategoricalFocalCrossentropy(**loss_params)
+        alpha = loss_params.get("alpha", 0.25)
+        loss_params["alpha"] = (
+            tf.convert_to_tensor(np.array(alpha))
+            if not isinstance(alpha, float)
+            else alpha
+        )
+        loss = keras.losses.CategoricalFocalCrossentropy(**loss_params)
     else:
         loss = keras.losses.CategoricalCrossentropy(**loss_params)
 
-    model = f_get_model(**model_cfg)  # type: ignore
-    assert isinstance(model, keras.Model)
+    model = f_get_model(**cast(dict, model_cfg))
+    assert_type(model, keras.Model)
     model.compile(
         loss=loss,
         optimizer=getattr(keras.optimizers, optimizer)(**optimizer_params),
@@ -102,8 +104,12 @@ def train(
         callbacks.append(lr_schedule)
 
     if class_weight:
-        divisor = 1 if "weight_divisor" not in class_weight else class_weight.weight_divisor
-        class_weight_map = {k: v / divisor for (k, v) in class_weight.weight_map.items()}
+        divisor = (
+            1 if "weight_divisor" not in class_weight else class_weight.weight_divisor
+        )
+        class_weight_map = {
+            k: v / divisor for (k, v) in class_weight.weight_map.items()
+        }
     else:
         class_weight_map = None
 
@@ -115,6 +121,9 @@ def train(
         verbose=2,
         **train_args,
     )
+
+    if save_model:
+        model.save(tensorboard_path / f"{model.name}.keras", zipped=True)
 
     return model, history
 
@@ -128,8 +137,7 @@ def main(cfg: DictConfig):
 
     dtype_policy = None if "mixed_precision" not in cfg else cfg.mixed_precision
 
-    get_dataloader = partial(
-        get_train_val_dataloader,
+    train_dataloader, val_dataloader = get_train_val_dataloader(
         train_path=train_path,
         seed=seed,
         val_split=cfg.data.val_split,
@@ -147,7 +155,8 @@ def main(cfg: DictConfig):
         model_cfg=model_cfg,
         seed=cfg.seed,
         f_get_model=not_resnet,
-        f_get_dataloader=get_dataloader,
+        train_data=train_dataloader,
+        val_data=val_dataloader,
         dtype_policy=dtype_policy,
         **cfg.train,
     )

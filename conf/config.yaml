@@ -12,7 +12,7 @@ model:
   input_shape: [256, 256, 3]
   output_activation: softmax
   block_dropout: 0.3
-  blocks: 
+  blocks:
     - filters: 16
     - filters: 16
     - filters: 16
@@ -24,29 +24,30 @@ model:
     - filters: 128
 
 train:
-  focal_loss: True
+  save_model: true
+  focal_loss: true
   loss_params:
     # label_smoothing: 0.1
     # alpha: [[0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]]
     alpha: [[0.12705305, 0.01433119, 0.12518212, 0.1132095 , 0.12223666,
        0.13133574, 0.12484786, 0.11988596, 0.12191792]]
-  augment: False # Augments are broken on macos for some reason?
+  augment: true # Augments are broken on macos for some reason?
   optimizer: AdamW
   optimizer_params:
-    learning_rate: 1e-4
+    learning_rate: 1e-3
     weight_decay: 1e-1
   num_classes: 9
   metrics: [accuracy, precision, recall, auc]
   batch_size: 64
   early_stopping_params:
     monitor: loss
-    patience: 10 
+    patience: 25
     restore_best_weights: True
-  lr_schedule_params: 
+  lr_schedule_params:
     monitor: val_loss
     factor: 0.5
-    patience: 15 
-    cooldown: 20
+    patience: 20
+    cooldown: 10
   # Class weighting combined with focal alpha hurt performance, alpha on it's own gives better performance
   # class_weight:
   #   weight_divisor: 1.0
@@ -61,7 +62,7 @@ train:
   #     7: 1.7958689458689459
   #     8: 1.826307402578589
   train_args:
-    epochs: 300
+    epochs: 500
 
 output:
   logdir: tf_logs
