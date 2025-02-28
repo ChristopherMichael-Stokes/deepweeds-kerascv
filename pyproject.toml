@@ -2,43 +2,24 @@
 name = "deepweeds"
 version = "0.1.0"
 authors = [
-  { name="Christopher Michael-Stokes", email="christophermichaelstokes@gmail.com" },
+  { name = "Christopher Michael-Stokes", email = "christophermichaelstokes@gmail.com" },
 ]
 description = "Python modules for object detection in keras. This is not intended for distribution."
 readme = "README.md"
 requires-python = "~=3.11"
 dependencies = [
     "build>=1.2.2",
-    "gdown>=5.2.0",
-    "hydra-core>=1.3.2",
-    "jupyter>=1.1.1",
-    "keras-cv>=0.9.0",
-    "keras-tuner>=1.4.7",
-    "opencv-python>=4.10.0.84",
-    "pandas>=2.2.3",
-    "pillow>=10.4.0",
-    "plotly>=5.24.1",
-    "scikit-learn>=1.5.2",
-    "scipy>=1.14.1",
-    "tensorboard-plugin-profile>=2.17.0",
-    "tensorflow-datasets>=4.9.6",
-    "tensorflow[and-cuda]~=2.17 ; sys_platform == 'linux'",
-    "tensorflow-metal>=1.1.0 ; sys_platform == 'darwin'",
-    "tensorflow>=2.17 ; sys_platform == 'darwin'",
-    "tensorrt>=10.5.0 ; sys_platform == 'linux'",
-    "types-tensorflow>=2.17.0.20240920",
+    "pydantic>=2.10.6",
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
 ]
-
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
 
 [project.urls]
 Homepage = "https://github.com/ChristopherMichael-Stokes/deepweeds-kerascv"
@@ -48,5 +29,59 @@ Issues = "https://github.com/ChristopherMichael-Stokes/deepweeds-kerascv/issues"
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
-
 ignore_missing_imports = true
+
+[tool.uv]
+default-groups = ['dev', 'training', 'inference']
+
+[tool.uv.sources]
+# tensorrt = { index = "nvidia" }
+
+[[tool.uv.index]]
+url = "file:///home/chris/repos/deepweeds-kerascv/nvidia"
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com/"
+
+[dependency-groups]
+dev = [
+  "jupyter>=1.1.1",
+  "gdown>=5.2.0",
+  "keras-tuner>=1.4.7",
+  "tensorboard-plugin-profile>=2.17.0",
+  "types-tensorflow>=2.17.0.20240920",
+  "matplotlib>=3.10.0",
+  "mypy>=1.15.0",
+]
+training = [
+  "hydra-core>=1.3.2",
+  "keras-cv>=0.9.0",
+  "opencv-python>=4.10.0.84",
+  "pandas>=2.2.3",
+  "pillow>=10.4.0",
+  "plotly>=5.24.1",
+  "scikit-learn>=1.5.2",
+  "scipy>=1.14.1",
+  "tensorflow-datasets>=4.9.6",
+  "tensorflow[and-cuda]~=2.18 ; sys_platform == 'linux'",
+  "tensorflow-metal>=1.1.0 ; sys_platform == 'darwin'",
+  "tensorflow>=2.17 ; sys_platform == 'darwin'",
+  # "tensorrt>=10.5.0 ; sys_platform == 'linux'",
+]
+inference = [
+  "fastapi[standard]>=0.115.8",
+  "numpy>=1.26.4",
+  "nvidia-cuda-nvrtc-cu12==12.5.82 ; sys_platform == 'linux'",
+  "nvidia-cudnn-cu12==9.3.0.75 ; sys_platform == 'linux'",
+  "nvidia-cufft-cu12==11.2.3.61 ; sys_platform == 'linux'",
+  "nvidia-curand-cu12==10.3.6.82 ; sys_platform == 'linux'",
+  "onnxruntime~=1.20.1 ; sys_platform == 'darwin'",
+  "onnxruntime-gpu==1.20.1 ; sys_platform == 'linux'",
+  "pillow>=10.4.0",
+  "pydantic-settings>=2.8.1",
+  "tensorrt-cu12==10.8.0.43 ; sys_platform == 'linux'",
+  "tensorrt-cu12-bindings==10.8.0.43 ; sys_platform == 'linux'",
+  "tensorrt-cu12-libs==10.8.0.43 ; sys_platform == 'linux'",
+  "tf2onnx>=1.16.1",
+]
