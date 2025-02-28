@@ -1,0 +1,2 @@
+- train.lr_schedule_params.factor=0.5
+- train.optimizer_params.learning_rate=5e-05
