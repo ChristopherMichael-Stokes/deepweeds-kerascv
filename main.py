@@ -16,7 +16,20 @@ class Settings(BaseSettings):
     MODEL_DIR: Path = Path("/opt/models")
     MODEL_NAME: str = "MeNet.onnx"
     MODEL_INPUT_SHAPE: tuple[int, int] = (256, 256)
-    ONNX_PROVIDERS: list[str] = ["TensorrtExecutionProvider", "CUDAExecutionProvider"]
+    ONNX_PROVIDERS: list[tuple[str, dict] | str] = [
+        (
+            "TensorrtExecutionProvider",
+            {
+                "trt_max_workspace_size": 8192,
+                "trt_fp16_enable": True,
+                # "trt_sparsity_enable": True,
+                # "trt_cuda_graph_enable": True,
+                # "trt_engine_hw_compatible": True,
+                # "trt_dla_enable": True,
+            },
+        ),
+        "CUDAExecutionProvider",
+    ]
 
 
 settings = Settings()
@@ -39,6 +52,7 @@ async def lifespan(app: FastAPI):
     ).astype(np.float32)
     onnx_session.run([onnx_output_name], {onnx_input_name: preload_sample})
     yield
+    del onnx_session, onnx_input_name, onnx_output_name
 
 
 app = FastAPI(lifespan=lifespan)

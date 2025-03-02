@@ -5,6 +5,7 @@ services:
       context: ./
       platforms:
         - linux/amd64
+      # target: prod
       target: dev
     ports:
       - "8000:8000"
